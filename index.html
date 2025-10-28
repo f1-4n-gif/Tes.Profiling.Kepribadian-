@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kepribadian: Menuntun dengan Keteladanan - Laporan Resmi</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+    <style>
+        /* Custom styles for a formal and institutional aesthetic */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light institutional background */
+            color: #1f2937; /* Dark text */
+        }
+        .card {
+            background: white;
+            border-radius: 0.75rem; /* Slightly less rounded than before */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+            border-top: 5px solid #1e3a8a; /* Formal accent line */
+        }
+        .btn-primary {
+            background-color: #1e3a8a; /* Dark Navy/Indigo for official feel */
+            color: white;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+        .btn-primary:hover {
+            background-color: #1f306d;
+            transform: translateY(-1px);
+        }
+        .likert-option {
+            border-radius: 0.5rem;
+        }
+        .likert-option:hover {
+            background-color: #e0e7ff; 
+            cursor: pointer;
+        }
+        .likert-option.selected {
+            background-color: #93c5fd; /* Lighter blue for selection */
+            color: #1e3a8a;
+            font-weight: 700;
+            border-color: #1e3a8a;
+        }
+        .header-bg {
+            background-color: #1e3a8a; /* Deep Institutional Blue */
+            color: white;
+        }
+        /* Style for the formal report summary tables */
+        .report-table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        .report-table th, .report-table td {
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            text-align: left;
+        }
+        .report-table th {
+            background-color: #f3f4f6;
+            color: #374151;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <header class="header-bg p-4 shadow-lg">
+        <div class="max-w-6xl mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-extrabold tracking-wide">APLIKASI PROFILING KEPRIBADIAN</h1>
+            <p class="text-sm italic text-indigo-200 hidden sm:block">"Menuntun dengan Keteladanan"</p>
+        </div>
+    </header>
+
+    <main id="app-container" class="flex-grow flex items-center justify-center p-4">
+        <!-- Content will be injected here -->
+    </main>
+
+    <footer class="p-4 text-center text-xs text-gray-500 border-t mt-auto bg-white">
+        Aplikasi ini dikembangkan oleh ALFIAN – Guru Bimbingan dan Konseling.
+        <br>
+        Terinspirasi oleh semangat pendidikan – <span class="font-semibold text-blue-800">Menuntun dengan Keteladanan.</span>
+    </footer>
+
+    <!-- Script Block -->
+    <script type="module">
+        // Import necessary Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Firebase variables (provided by the environment)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db = null;
+        let auth = null;
+        let userId = null;
+
+        // --- Application State and Data (unchanged) ---
+        let appState = {
+            view: 'welcome', // 'welcome', 'input', 'test', 'result'
+            userData: {
+                name: '',
+                age: '',
+                gender: 'Laki-laki',
+                status: ''
+            },
+            answers: new Array(30).fill(0),
+            results: null,
+            isSaving: false
+        };
+
+        const questions = [
+            // Bagian A — Kepribadian Diri & Emosi (1–10)
+            { id: 1, text: "Saya mudah merasa tenang dalam situasi sulit.", isPositive: true, section: 'A' },
+            { id: 2, text: "Saya sering merasa cemas tanpa alasan yang jelas.", isPositive: false, section: 'A' },
+            { id: 3, text: "Saya mampu mengendalikan emosi saya dengan baik.", isPositive: true, section: 'A' },
+            { id: 4, text: "Saya mudah tersinggung ketika dikritik.", isPositive: false, section: 'A' },
+            { id: 5, text: "Saya tetap berpikir jernih dalam tekanan.", isPositive: true, section: 'A' },
+            { id: 6, text: "Saya sering membiarkan emosi menguasai diri saya.", isPositive: false, section: 'A' },
+            { id: 7, text: "Saya merasa percaya diri dengan kemampuan saya.", isPositive: true, section: 'A' },
+            { id: 8, text: "Saya sering meragukan keputusan yang saya buat.", isPositive: false, section: 'A' },
+            { id: 9, text: "Saya bisa menerima kegagalan dengan lapang dada.", isPositive: true, section: 'A' },
+            { id: 10, text: "Saya sulit memaafkan orang lain yang berbuat salah.", isPositive: false, section: 'A' },
+            // Bagian B — Sosial & Hubungan dengan Orang Lain (11–20)
+            { id: 11, text: "Saya mudah bergaul dengan orang baru.", isPositive: true, section: 'B' },
+            { id: 12, text: "Saya lebih suka menyendiri daripada berbicara dengan banyak orang.", isPositive: false, section: 'B' },
+            { id: 13, text: "Saya suka membantu orang lain tanpa diminta.", isPositive: true, section: 'B' },
+            { id: 14, text: "Saya merasa canggung saat harus berbicara di depan umum.", isPositive: false, section: 'B' },
+            { id: 15, text: "Saya dapat bekerja sama dengan siapa pun.", isPositive: true, section: 'B' },
+            { id: 16, text: "Saya mudah tersinggung ketika pendapat saya ditolak.", isPositive: false, section: 'B' },
+            { id: 17, text: "Saya terbuka terhadap pandangan yang berbeda.", isPositive: true, section: 'B' },
+            { id: 18, text: "Saya sulit mempercayai orang lain.", isPositive: false, section: 'B' },
+            { id: 19, text: "Saya menikmati bekerja dalam tim.", isPositive: true, section: 'B' },
+            { id: 20, text: "Saya sering menilai orang lain terlalu cepat.", isPositive: false, section: 'B' },
+            // Bagian C — Pola Pikir & Kreativitas (21–30)
+            { id: 21, text: "Saya suka mencoba ide atau hal-hal baru.", isPositive: true, section: 'C' },
+            { id: 22, text: "Saya cepat menyerah saat menghadapi kesulitan.", isPositive: false, section: 'C' },
+            { id: 23, text: "Saya berpikir logis sebelum mengambil keputusan.", isPositive: true, section: 'C' },
+            { id: 24, text: "Saya sering bertindak tanpa memikirkan akibatnya.", isPositive: false, section: 'C' },
+            { id: 25, text: "Saya mampu melihat masalah dari berbagai sudut pandang.", isPositive: true, section: 'C' },
+            { id: 26, text: "Saya enggan keluar dari zona nyaman saya.", isPositive: false, section: 'C' },
+            { id: 27, text: "Saya memiliki imajinasi dan kreativitas tinggi.", isPositive: true, section: 'C' },
+            { id: 28, text: "Saya sering menunda pekerjaan hingga batas waktu terakhir.", isPositive: false, section: 'C' },
+            { id: 29, text: "Saya senang belajar hal baru untuk mengembangkan diri.", isPositive: true, section: 'C' },
+            { id: 30, text: "Saya jarang merencanakan sesuatu secara matang.", isPositive: false, section: 'C' }
+        ];
+
+        // Scoring constant
+        const MAX_SCORE_PER_SECTION = 50;
+        const THRESHOLD = 35; // Score above this is considered 'High'
+
+        // --- Firebase Initialization and Authentication (unchanged) ---
+
+        async function initializeFirebase() {
+            if (!firebaseConfig) {
+                console.error("Firebase configuration is missing.");
+                return;
+            }
+
+            try {
+                // Set Firestore log level for debugging
+                setLogLevel('debug');
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+                console.log("Firebase initialized. User ID:", userId);
+
+            } catch (error) {
+                console.error("Error during Firebase initialization or authentication:", error);
+            }
+        }
+
+        // --- Core Application Functions (unchanged) ---
+
+        function render() {
+            const container = document.getElementById('app-container');
+            container.innerHTML = '';
+            
+            let content;
+            switch (appState.view) {
+                case 'welcome':
+                    content = renderWelcome();
+                    break;
+                case 'input':
+                    content = renderInputForm();
+                    break;
+                case 'test':
+                    content = renderTest();
+                    break;
+                case 'result':
+                    content = renderResult();
+                    break;
+                default:
+                    content = renderWelcome();
+            }
+            container.appendChild(content);
+        }
+
+        function setView(viewName) {
+            appState.view = viewName;
+            render();
+        }
+
+        // --- View Rendering Functions (styling updated for formal look) ---
+
+        function renderWelcome() {
+            const div = document.createElement('div');
+            div.className = 'card max-w-lg w-full p-8 text-center';
+            div.innerHTML = `
+                <!-- Formal Logo/Institution Emblem -->
+                <div class="text-6xl text-blue-800 mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                    </svg>
+                </div>
+                <h2 class="text-4xl font-extrabold text-gray-800 mb-2">Sistem Pengujian Profil Kepribadian</h2>
+                <p class="text-xl font-medium text-blue-800 mb-8 italic">"Menuntun dengan Keteladanan"</p>
+                <p class="text-gray-600 mb-8">Anda akan mengikuti serangkaian 30 pertanyaan untuk menghasilkan Profil Kepribadian Diri. Mohon dijawab dengan jujur sesuai kondisi saat ini. Kerahasiaan data terjamin.</p>
+                <button id="startButton" class="btn-primary w-full py-3 rounded-lg text-lg font-semibold">Mulai Tes Kepribadian Resmi</button>
+            `;
+            div.querySelector('#startButton').addEventListener('click', () => setView('input'));
+            return div;
+        }
+
+        function renderInputForm() {
+            const div = document.createElement('div');
+            div.className = 'card max-w-lg w-full p-8';
+            div.innerHTML = `
+                <h2 class="text-2xl font-bold text-gray-800 mb-6 border-b-2 pb-2 border-blue-800 text-blue-800">Pengisian Data Peserta Uji</h2>
+                
+                <form id="dataForm" class="space-y-4">
+                    <div>
+                        <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
+                        <input type="text" id="name" name="name" class="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-700 focus:border-blue-700" value="${appState.userData.name}" required>
+                    </div>
+                    <div>
+                        <label for="age" class="block text-sm font-medium text-gray-700 mb-1">Usia (Tahun)</label>
+                        <input type="number" id="age" name="age" class="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-700 focus:border-blue-700" value="${appState.userData.age}" required min="10" max="99">
+                    </div>
+                    <div>
+                        <label for="gender" class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
+                        <select id="gender" name="gender" class="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-700 focus:border-blue-700">
+                            <option value="Laki-laki">Laki-laki</option>
+                            <option value="Perempuan" ${appState.userData.gender === 'Perempuan' ? 'selected' : ''}>Perempuan</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="status" class="block text-sm font-medium text-gray-700 mb-1">Pekerjaan / Status</label>
+                        <input type="text" id="status" name="status" class="mt-1 block w-full border border-gray-300 rounded-lg shadow-sm p-3 focus:ring-blue-700 focus:border-blue-700" value="${appState.userData.status}" required>
+                    </div>
+                    <button type="submit" class="btn-primary w-full py-3 rounded-lg text-lg font-semibold mt-6">Lanjutkan ke Sesi Uji</button>
+                </form>
+            `;
+
+            const form = div.querySelector('#dataForm');
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                appState.userData.name = form.elements['name'].value.trim();
+                appState.userData.age = parseInt(form.elements['age'].value.trim());
+                appState.userData.gender = form.elements['gender'].value;
+                appState.userData.status = form.elements['status'].value.trim();
+
+                // Validation
+                if (appState.userData.name && appState.userData.age && appState.userData.status) {
+                    // Reset answers for a new test
+                    appState.answers = new Array(30).fill(0);
+                    setView('test');
+                } else {
+                    showMessage('Mohon lengkapi semua data diri Anda.', 'error');
+                }
+            });
+            return div;
+        }
+
+        function renderTest() {
+            const div = document.createElement('div');
+            div.className = 'card max-w-4xl w-full p-8';
+            div.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-2 text-center text-blue-800">Sesi Uji Kepribadian</h2>
+                <p class="text-center text-gray-600 mb-6 border-b pb-4">Pilih jawaban Anda pada skala 1 sampai 5 untuk setiap pernyataan.</p>
+                
+                <div class="flex justify-between text-xs font-semibold text-gray-500 mb-4 px-2 sm:px-4">
+                    <span class="p-1 border rounded-lg bg-red-100 text-red-800">1: Sangat Tidak Setuju (STS)</span>
+                    <span class="p-1 border rounded-lg bg-green-100 text-green-800">5: Sangat Setuju (SS)</span>
+                </div>
+
+                <div id="questionsContainer" class="space-y-4">
+                    ${questions.map((q, index) => `
+                        <div class="p-4 border rounded-lg shadow-sm bg-gray-50 border-gray-200">
+                            <p class="text-base font-medium mb-3 text-gray-800">
+                                <span class="text-blue-800 font-bold mr-2">${q.id}.</span> ${q.text}
+                            </p>
+                            <div class="flex justify-between gap-1 md:gap-3 text-center">
+                                ${[1, 2, 3, 4, 5].map(score => `
+                                    <div 
+                                        data-q-index="${index}" 
+                                        data-score="${score}" 
+                                        class="likert-option flex-1 py-2 rounded-lg border transition duration-150 ease-in-out text-sm ${appState.answers[index] === score ? 'selected border-blue-800' : 'border-gray-300'}"
+                                        title="${['Sangat Tidak Setuju', 'Tidak Setuju', 'Netral', 'Setuju', 'Sangat Setuju'][score-1]}"
+                                        >
+                                        ${score}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <button id="submitTest" class="btn-primary w-full py-3 rounded-lg text-lg font-semibold mt-8">Selesaikan Uji & Proses Laporan</button>
+            `;
+
+            div.querySelector('#questionsContainer').addEventListener('click', (e) => {
+                const target = e.target.closest('.likert-option');
+                if (target) {
+                    const qIndex = parseInt(target.dataset.qIndex);
+                    const score = parseInt(target.dataset.score);
+                    appState.answers[qIndex] = score;
+                    // Force re-render of the container to update selection state
+                    render();
+                }
+            });
+
+            div.querySelector('#submitTest').addEventListener('click', () => {
+                if (appState.answers.includes(0)) {
+                    showMessage('Anda harus menjawab semua 30 pertanyaan sebelum melihat hasil.', 'error');
+                } else {
+                    calculateAndAnalyzeResults();
+                    setView('result');
+                }
+            });
+
+            return div;
+        }
+
+        // --- Result Calculation (unchanged) ---
+
+        function calculateAndAnalyzeResults() {
+            let scoreA = 0; // Emotional Stability
+            let scoreB = 0; // Social Tendency
+            let scoreC = 0; // Cognitive Style
+
+            appState.answers.forEach((score, index) => {
+                const q = questions[index];
+                let finalScore = score;
+                
+                // Reverse score for negative questions (R = 6 - Original Score)
+                if (!q.isPositive) {
+                    finalScore = 6 - score;
+                }
+
+                if (q.section === 'A') scoreA += finalScore;
+                else if (q.section === 'B') scoreB += finalScore;
+                else if (q.section === 'C') scoreC += finalScore;
+            });
+
+            // Determine dimensions
+            const dimA = scoreA >= THRESHOLD ? 'Stabil' : 'Sensitif';
+            const dimB = scoreB >= THRESHOLD ? 'Proaktif' : 'Reflektif';
+            const dimC = scoreC >= THRESHOLD ? 'Inovatif' : 'Analitis';
+
+            const personalityType = `${dimA.charAt(0)}${dimB.charAt(0)}${dimC.charAt(0)} - ${dimA}/${dimB}/${dimC}`;
+
+            // Store results
+            appState.results = {
+                scoreA, scoreB, scoreC,
+                dimA, dimB, dimC,
+                personalityType,
+                totalScore: scoreA + scoreB + scoreC
+            };
+
+            // Save the result to Firestore
+            saveResultsToFirestore();
+        }
+
+        function getAnalysis(results) {
+            const analysis = {
+                type: results.personalityType,
+                description: '',
+                strengths: [],
+                weaknesses: [],
+                development: []
+            };
+
+            const [dimA, dimB, dimC] = [results.dimA, results.dimB, results.dimC];
+
+            // 1. Description (Updated language for formal tone)
+            analysis.description = `Profil kepribadian Anda teridentifikasi sebagai ${dimA}/${dimB}/${dimC}. Profil ini mencerminkan kombinasi antara ${dimA === 'Stabil' ? 'keseimbangan emosi yang baik' : 'tingkat kepekaan emosi yang tinggi'}, ${dimB === 'Proaktif' ? 'orientasi sosial dan inisiatif' : 'preferensi terhadap introspeksi dan lingkungan yang tenang'}, serta ${dimC === 'Inovatif' ? 'kemampuan adaptasi dan kreativitas' : 'pendekatan logis, terstruktur, dan hati-hati'}.`;
+
+            // 2. Strengths and Weaknesses
+            if (dimA === 'Stabil') {
+                analysis.strengths.push("Memiliki ketahanan stres yang tinggi dan mampu menjaga objektivitas dalam pengambilan keputusan.");
+                analysis.weaknesses.push("Cenderung kurang mengekspresikan emosi, yang dapat disalahartikan sebagai kurangnya kepedulian.");
+            } else { // Sensitif
+                analysis.strengths.push("Memiliki kepekaan interpersonal dan empati yang tinggi terhadap kondisi orang lain.");
+                analysis.weaknesses.push("Rentang emosi yang dinamis, berpotensi mengalami kecemasan dan keraguan diri (self-doubt) di bawah tekanan.");
+                analysis.development.push("Rekomendasi Latihan: Mengimplementasikan teknik mindfulness dan penyusunan prioritas untuk mengelola beban mental.");
+            }
+
+            if (dimB === 'Proaktif') {
+                analysis.strengths.push("Efektif dalam interaksi publik, mudah membangun jaringan, dan memiliki inisiatif tinggi dalam kolaborasi.");
+                analysis.weaknesses.push("Berpotensi mengambil keputusan yang terlalu cepat (impulsif) dan membutuhkan stimulasi eksternal yang konstan.");
+            } else { // Reflektif
+                analysis.strengths.push("Mampu menganalisis masalah secara mendalam dan fokus pada kualitas hubungan yang bermakna.");
+                analysis.weaknesses.push("Cenderung menghindari situasi publik atau presentasi, serta memerlukan waktu yang lama untuk memercayai orang lain.");
+                analysis.development.push("Rekomendasi Latihan: Secara bertahap mencari peran kepemimpinan dalam kelompok kecil untuk meningkatkan kepercayaan diri sosial.");
+            }
+
+            if (dimC === 'Inovatif') {
+                analysis.strengths.push("Sangat kreatif, fleksibel, dan memiliki rasa ingin tahu yang besar untuk mempelajari ide-ide baru.");
+                analysis.weaknesses.push("Manajemen waktu dan perencanaan seringkali lemah, cenderung menunda pekerjaan hingga akhir.");
+            } else { // Analitis
+                analysis.strengths.push("Menerapkan kerangka berpikir logis, detail, dan terstruktur dalam setiap tugas dan proyek.");
+                analysis.weaknesses.push("Kecenderungan untuk resisten terhadap perubahan mendadak dan cepat menyerah saat menemui kompleksitas di luar kerangka pikir yang dikenal.");
+                analysis.development.push("Rekomendasi Latihan: Berpartisipasi dalam proyek yang melibatkan ketidakpastian tinggi untuk mengembangkan ketahanan adaptif.");
+            }
+
+            // 3. General Development Suggestions (Simplified and integrated above)
+            analysis.development.push(`Analisis lebih lanjut diperlukan pada dimensi dengan skor paling rendah untuk optimalisasi potensi diri.`);
+            
+            return analysis;
+        }
+
+
+        function renderResult() {
+            if (!appState.results) return document.createElement('div');
+
+            const analysis = getAnalysis(appState.results);
+            const date = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+            
+            const div = document.createElement('div');
+            div.className = 'card max-w-4xl w-full p-8';
+            div.innerHTML = `
+                <h2 class="text-3xl font-extrabold text-gray-800 mb-2 text-center text-blue-800 border-b-4 border-blue-100 pb-3">LAPORAN RESMI PROFIL KEPRIBADIAN</h2>
+                <p class="text-center text-gray-600 mb-6 text-sm">Tanggal Laporan: ${date}</p>
+
+                <!-- Data Peserta Uji (Formal Table) -->
+                <div class="mb-8 border border-gray-300 rounded-lg overflow-hidden">
+                    <div class="p-4 bg-gray-100 border-b">
+                        <h3 class="text-lg font-bold text-gray-800">I. Data Peserta Uji</h3>
+                    </div>
+                    <table class="report-table">
+                        <tr>
+                            <td class="w-1/3 font-semibold">Nama Lengkap</td>
+                            <td>${appState.userData.name}</td>
+                            <td class="w-1/3 font-semibold">Tipe Identifikasi</td>
+                            <td class="font-extrabold text-blue-700">${analysis.type.split(' - ')[0]}</td>
+                        </tr>
+                        <tr>
+                            <td class="font-semibold">Usia / Jenis Kelamin</td>
+                            <td>${appState.userData.age} Tahun / ${appState.userData.gender}</td>
+                            <td class="font-semibold">Deskripsi Tipe</td>
+                            <td class="italic text-gray-700">${analysis.type.split(' - ')[1]}</td>
+                        </tr>
+                        <tr>
+                            <td class="font-semibold">Status/Pekerjaan</td>
+                            <td>${appState.userData.status}</td>
+                            <td class="font-semibold">ID Pengujian</td>
+                            <td class="text-xs text-gray-500">${userId}</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- II. Analisis Dimensi Kepribadian -->
+                <div class="space-y-6 mb-8">
+                    <div class="p-6 border rounded-lg bg-white shadow-sm border-blue-100">
+                        <h3 class="text-xl font-bold text-gray-800 mb-3 border-b pb-2 text-blue-800">II. Deskripsi Profil Hasil Uji</h3>
+                        <p class="text-gray-700">${analysis.description}</p>
+                    </div>
+
+                    <!-- III. Profil Detail -->
+                    <div class="p-6 border rounded-lg bg-white shadow-sm border-green-100">
+                        <h3 class="text-xl font-bold text-green-700 mb-3 border-b pb-2 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.111a9 9 0 11-12.728 0m12.728 0A9 9 0 0012 3v1m0 16v1m0-13v1" /></svg>III. Potensi Unggul (Kelebihan)</h3>
+                        <ul class="list-disc ml-5 space-y-1 text-gray-700">
+                            ${analysis.strengths.map(s => `<li>${s}</li>`).join('')}
+                        </ul>
+                    </div>
+                    
+                    <div class="p-6 border rounded-lg bg-red-50 shadow-sm border-red-200">
+                        <h3 class="text-xl font-bold text-red-700 mb-3 border-b pb-2 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>IV. Area Pengembangan (Kekurangan)</h3>
+                        <ul class="list-disc ml-5 space-y-1 text-gray-700">
+                            ${analysis.weaknesses.map(w => `<li>${w}</li>`).join('')}
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- V. Rekomendasi Pengembangan Diri -->
+                <div class="p-6 border rounded-lg bg-blue-50 shadow-sm border-blue-200 mb-8">
+                    <h3 class="text-xl font-bold text-blue-800 mb-3 border-b pb-2 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>V. Rekomendasi dan Tindak Lanjut</h3>
+                    <ul class="list-decimal ml-5 space-y-2 text-gray-700">
+                        ${analysis.development.map(d => `<li>${d}</li>`).join('')}
+                    </ul>
+                </div>
+
+                <!-- VI. Grafik Hasil -->
+                <div class="mb-8 p-6 border rounded-lg bg-white shadow-lg">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2 text-blue-800">VI. Visualisasi Profil Dimensi</h3>
+                    <canvas id="personalityChart"></canvas>
+                    <table class="report-table mt-4 text-sm">
+                        <tr>
+                            <th>Dimensi</th>
+                            <th>Deskripsi Dimensi</th>
+                            <th>Skor Capaian</th>
+                        </tr>
+                        <tr>
+                            <td>Stabilitas Emosi (A)</td>
+                            <td>Kemampuan mengelola stres dan menghadapi kesulitan.</td>
+                            <td class="font-bold">${appState.results.scoreA} / ${MAX_SCORE_PER_SECTION}</td>
+                        </tr>
+                        <tr>
+                            <td>Tendensi Sosial (B)</td>
+                            <td>Gaya interaksi dan preferensi kerja tim/individual.</td>
+                            <td class="font-bold">${appState.results.scoreB} / ${MAX_SCORE_PER_SECTION}</td>
+                        </tr>
+                        <tr>
+                            <td>Gaya Kognitif (C)</td>
+                            <td>Pola pikir dalam menghadapi ide baru dan pengambilan keputusan.</td>
+                            <td class="font-bold">${appState.results.scoreC} / ${MAX_SCORE_PER_SECTION}</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- Footer dan Tombol Aksi -->
+                <div class="flex flex-col sm:flex-row gap-4 mt-6">
+                    <button id="printPdfBtn" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-6 rounded-lg transition duration-300 flex-1">
+                        Cetak Laporan ke PDF (Simulasi)
+                    </button>
+                    <button onclick="window.location.reload();" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-3 px-6 rounded-lg transition duration-300 flex-1">
+                        Ulangi Sesi Uji
+                    </button>
+                </div>
+                <p id="saveStatus" class="text-center mt-4 text-sm text-gray-500">Menyimpan hasil...</p>
+            `;
+
+            // Setup Chart.js
+            setTimeout(() => {
+                renderChart(appState.results);
+            }, 0);
+            
+            // Print PDF Handler
+            div.querySelector('#printPdfBtn').addEventListener('click', () => {
+                showMessage('Fitur pencetakan laporan ke PDF (via jsPDF) belum sepenuhnya didukung di lingkungan ini. Anda dapat mencetak halaman ini melalui fungsi cetak browser Anda.', 'info');
+            });
+            
+            return div;
+        }
+
+        function renderChart(results) {
+            const ctx = document.getElementById('personalityChart').getContext('2d');
+            
+            // Destroy existing chart if it exists to prevent overlap
+            if (window.personalityChartInstance) {
+                window.personalityChartInstance.destroy();
+            }
+
+            const data = {
+                labels: ['Stabilitas Emosi (A)', 'Tendensi Sosial (B)', 'Gaya Kognitif (C)'],
+                datasets: [{
+                    label: 'Skor Capaian (Max: 50)',
+                    data: [results.scoreA, results.scoreB, results.scoreC],
+                    backgroundColor: [
+                        'rgba(30, 58, 138, 0.8)', // Dark Blue
+                        'rgba(21, 128, 61, 0.8)', // Green
+                        'rgba(180, 83, 9, 0.8)', // Amber/Brown
+                    ],
+                    borderColor: [
+                        'rgba(30, 58, 138, 1)',
+                        'rgba(21, 128, 61, 1)',
+                        'rgba(180, 83, 9, 1)',
+                    ],
+                    borderWidth: 1.5
+                }]
+            };
+
+            const config = {
+                type: 'bar',
+                data: data,
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: MAX_SCORE_PER_SECTION,
+                            title: {
+                                display: true,
+                                text: 'Skor Capaian',
+                                color: '#1e3a8a'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true
+                        },
+                        title: {
+                            display: true,
+                            text: 'Perbandingan Dimensi Kepribadian',
+                            font: { size: 16, weight: 'bold' }
+                        }
+                    }
+                }
+            };
+
+            window.personalityChartInstance = new Chart(ctx, config);
+        }
+
+        // --- Utility Functions (unchanged) ---
+        function showMessage(message, type = 'info') {
+            const container = document.getElementById('app-container');
+            const existing = document.getElementById('messageBox');
+            if (existing) existing.remove();
+
+            const box = document.createElement('div');
+            box.id = 'messageBox';
+            box.className = `fixed top-4 right-4 p-4 rounded-lg shadow-xl z-50 text-white font-semibold flex items-center transition-all duration-300`;
+
+            let bgColor = 'bg-blue-800';
+            let icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+            if (type === 'error') {
+                bgColor = 'bg-red-600';
+                icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.398 16c-.77 1.333.192 3 1.732 3z" /></svg>`;
+            }
+
+            box.classList.add(bgColor);
+            box.innerHTML = `${icon}<span>${message}</span>`;
+            document.body.appendChild(box);
+
+            setTimeout(() => {
+                box.remove();
+            }, 5000);
+        }
+
+        // --- Firestore Interaction (unchanged) ---
+
+        async function saveResultsToFirestore() {
+            if (!db || !userId) {
+                console.error("Firestore not initialized or user ID missing. Cannot save.");
+                document.getElementById('saveStatus').textContent = "Penyimpanan Gagal: Firebase tidak terinisialisasi.";
+                return;
+            }
+
+            const saveStatusElement = document.getElementById('saveStatus');
+            if (saveStatusElement) {
+                saveStatusElement.textContent = "Menyimpan hasil ke database...";
+            }
+            appState.isSaving = true;
+            
+
+            const resultData = {
+                userId: userId,
+                appId: appId,
+                userData: appState.userData,
+                testResults: appState.results,
+                rawAnswers: appState.answers,
+                timestamp: serverTimestamp()
+            };
+
+            // Path: /artifacts/{appId}/users/{userId}/personality_tests
+            const collectionPath = `artifacts/${appId}/users/${userId}/personality_tests`;
+
+            try {
+                // Use addDoc for a new document with auto-generated ID
+                const docRef = await addDoc(collection(db, collectionPath), resultData);
+                console.log("Document successfully written with ID:", docRef.id);
+                if (saveStatusElement) {
+                    saveStatusElement.textContent = `Laporan berhasil disimpan (ID: ${docRef.id}).`;
+                }
+                appState.isSaving = false;
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                if (saveStatusElement) {
+                    saveStatusElement.textContent = "Gagal menyimpan laporan. Cek konsol untuk detail error.";
+                }
+                appState.isSaving = false;
+            }
+        }
+
+        // --- Application Initialization ---
+        window.onload = async function() {
+            await initializeFirebase();
+            render();
+        };
+
+    </script>
+</body>
+</html>
